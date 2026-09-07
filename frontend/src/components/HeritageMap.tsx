@@ -17,17 +17,35 @@ interface HeritageMapProps {
 const MAPTILER_STYLE = `https://api.maptiler.com/maps/dataviz-dark/style.json?key=${import.meta.env.VITE_MAPTILER_KEY || 'elFs51jQIbpwyTfcdjS8'}`;
 const CARTO_DARK_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
-const FILTER_CHIPS = ['All', 'Jaipur', 'Agra', 'Delhi', 'Hampi', 'Varanasi', 'Konark', 'Mumbai'];
-
-const CITY_PRESETS: Record<string, { center: [number, number]; zoom: number }> = {
-  'All': { center: [78.9629, 22.5937], zoom: 4.8 },
-  'Jaipur': { center: [75.8267, 26.9239], zoom: 12.5 },
-  'Agra': { center: [78.0421, 27.1751], zoom: 13 },
-  'Hampi': { center: [76.4600, 15.3350], zoom: 12.8 },
-  'Varanasi': { center: [83.0104, 25.3060], zoom: 13 },
-  'Konark': { center: [86.0945, 19.8876], zoom: 13.5 },
-  'Mumbai': { center: [72.8347, 18.9220], zoom: 12.5 },
-  'Delhi': { center: [77.2090, 28.6139], zoom: 12 },
+const STATE_PRESETS: Record<string, { center: [number, number]; zoom: number }> = {
+  'Andhra Pradesh': { center: [79.7400, 15.9129], zoom: 6 },
+  'Arunachal Pradesh': { center: [94.7278, 28.2180], zoom: 6 },
+  'Assam': { center: [92.9376, 26.2006], zoom: 6 },
+  'Bihar': { center: [85.3131, 25.0961], zoom: 6 },
+  'Chhattisgarh': { center: [81.8661, 21.2787], zoom: 6 },
+  'Goa': { center: [74.1240, 15.2993], zoom: 8 },
+  'Gujarat': { center: [71.1924, 22.2587], zoom: 6 },
+  'Haryana': { center: [76.0856, 29.0588], zoom: 7 },
+  'Himachal Pradesh': { center: [77.1734, 31.1048], zoom: 7 },
+  'Jharkhand': { center: [85.3096, 23.6102], zoom: 6 },
+  'Karnataka': { center: [75.7139, 15.3173], zoom: 6 },
+  'Kerala': { center: [76.2711, 10.8505], zoom: 7 },
+  'Madhya Pradesh': { center: [78.6569, 22.9734], zoom: 6 },
+  'Maharashtra': { center: [75.7139, 19.7515], zoom: 6 },
+  'Manipur': { center: [93.9063, 24.6637], zoom: 7 },
+  'Meghalaya': { center: [91.3662, 25.4670], zoom: 7 },
+  'Mizoram': { center: [92.9376, 23.1645], zoom: 7 },
+  'Nagaland': { center: [94.5624, 26.1584], zoom: 7 },
+  'Odisha': { center: [85.0985, 20.9517], zoom: 6 },
+  'Punjab': { center: [75.3412, 31.1471], zoom: 7 },
+  'Rajasthan': { center: [74.2179, 27.0238], zoom: 6 },
+  'Sikkim': { center: [88.5122, 27.5330], zoom: 8 },
+  'Tamil Nadu': { center: [78.6569, 11.1271], zoom: 6 },
+  'Telangana': { center: [79.0193, 18.1124], zoom: 6 },
+  'Tripura': { center: [91.9882, 23.9408], zoom: 8 },
+  'Uttar Pradesh': { center: [80.9462, 26.8467], zoom: 6 },
+  'Uttarakhand': { center: [79.0193, 30.0668], zoom: 7 },
+  'West Bengal': { center: [87.8550, 22.9868], zoom: 6 },
 };
 
 const EPOCHS = [
@@ -45,7 +63,7 @@ function createMonumentEl(name: string): HTMLDivElement {
   const wrapper = document.createElement('div');
   // No transition on wrapper or any child — prevents marker drift
   wrapper.style.cssText =
-    'display:flex;flex-direction:column;align-items:center;cursor:pointer;position:relative;';
+    'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
 
   const pill = document.createElement('div');
   pill.style.cssText =
@@ -72,7 +90,7 @@ function createMonumentEl(name: string): HTMLDivElement {
 function createCityEl(name: string): HTMLDivElement {
   const el = document.createElement('div');
   el.style.cssText =
-    'display:flex;align-items:center;cursor:pointer;position:relative;pointer-events:auto;';
+    'display:flex;align-items:center;cursor:pointer;pointer-events:auto;';
 
   const label = document.createElement('div');
   label.style.cssText =
@@ -91,8 +109,8 @@ function updateMarkerVisibility(
   zoom: number
 ) {
   const showMonuments = zoom >= ZOOM_THRESHOLD;
-  markers.forEach(({ isCityMarker, el }) => {
-    if (isCityMarker) {
+  markers.forEach(({ isStateMarker, el }) => {
+    if (isStateMarker) {
       el.style.display = !showMonuments ? 'flex' : 'none';
     } else {
       el.style.display = showMonuments ? 'flex' : 'none';
@@ -104,7 +122,7 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
-  type MarkerEntry = { isCityMarker: boolean; monument?: Monument; cityName?: string; marker: maplibregl.Marker; el: HTMLElement };
+  type MarkerEntry = { isStateMarker: boolean; monument?: Monument; stateName?: string; marker: maplibregl.Marker; el: HTMLElement };
   const markersRef = useRef<MarkerEntry[]>([]);
 
   const [error, setError] = useState<string | null>(null);
@@ -177,7 +195,7 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
             .setLngLat([monument.lng, monument.lat])
             .addTo(map);
 
-          markersRef.current.push({ isCityMarker: false, monument, marker, el });
+          markersRef.current.push({ isStateMarker: false, monument, marker, el });
 
           if (targetMonumentName && monument.name.toLowerCase().includes(targetMonumentName.toLowerCase())) {
             targetFound = true;
@@ -187,14 +205,12 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
           }
         });
 
-        // --- City markers ---
-        Object.entries(CITY_PRESETS).forEach(([city, preset]) => {
-          if (city === 'All') return;
+        // --- State markers ---
+        Object.entries(STATE_PRESETS).forEach(([state, preset]) => {
+          const stateEl = createCityEl(state);
+          stateEl.style.display = !showMonuments ? 'flex' : 'none';
 
-          const cityEl = createCityEl(city);
-          cityEl.style.display = !showMonuments ? 'flex' : 'none';
-
-          cityEl.addEventListener('click', (e) => {
+          stateEl.addEventListener('click', (e) => {
             e.stopPropagation();
             map.flyTo({
               center: preset.center,
@@ -207,11 +223,11 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
             // After fly completes, markers will be shown by the zoom listener
           });
 
-          const cityMarker = new maplibregl.Marker({ element: cityEl, anchor: 'center' })
+          const stateMarker = new maplibregl.Marker({ element: stateEl, anchor: 'center' })
             .setLngLat(preset.center)
             .addTo(map);
 
-          markersRef.current.push({ isCityMarker: true, cityName: city, marker: cityMarker, el: cityEl });
+          markersRef.current.push({ isStateMarker: true, stateName: state, marker: stateMarker, el: stateEl });
         });
 
         // Fit to all monuments if no target
@@ -263,7 +279,7 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
   useEffect(() => {
     if (!targetMonumentName) return;
     const tryFly = (attempt = 0) => {
-      const monumentMarkers = markersRef.current.filter(m => !m.isCityMarker && m.monument);
+      const monumentMarkers = markersRef.current.filter(m => !m.isStateMarker && m.monument);
       if (monumentMarkers.length === 0) {
         if (attempt < 25) setTimeout(() => tryFly(attempt + 1), 300);
         return;
@@ -287,8 +303,8 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
     const map = mapRef.current;
     if (!map) return;
 
-    if (CITY_PRESETS[filter]) {
-      const preset = CITY_PRESETS[filter];
+    if (STATE_PRESETS[filter]) {
+      const preset = STATE_PRESETS[filter];
       map.flyTo({ center: preset.center, zoom: preset.zoom, pitch: 30, bearing: 0, duration: 1800, essential: true });
     } else if (filter === 'All') {
       const valid = monuments.filter(m => m.lat && m.lng && isFinite(m.lat) && isFinite(m.lng));
@@ -300,8 +316,8 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
     }
 
     // Highlight matching markers
-    markersRef.current.forEach(({ isCityMarker, monument, el }) => {
-      if (isCityMarker) return;
+    markersRef.current.forEach(({ isStateMarker, monument, el }) => {
+      if (isStateMarker) return;
       const desc = monument?.description || '';
       const name = monument?.name || '';
       const isMatch = filter === 'All' || name.toLowerCase().includes(filter.toLowerCase()) || desc.toLowerCase().includes(filter.toLowerCase());
@@ -312,8 +328,8 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
 
   const filterTimeline = (query: string) => {
     setTimelineEpoch(query);
-    markersRef.current.forEach(({ isCityMarker, monument, el }) => {
-      if (isCityMarker) return;
+    markersRef.current.forEach(({ isStateMarker, monument, el }) => {
+      if (isStateMarker) return;
       if (query === 'All') {
         el.style.opacity = '1';
         el.style.pointerEvents = 'auto';
@@ -363,8 +379,8 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
         </button>
 
         {viewMode === 'explore' && (
-          <div className="hidden md:flex flex-wrap items-center justify-end gap-1.5 max-w-xl pointer-events-auto">
-            {FILTER_CHIPS.map(chip => (
+          <div className="hidden md:flex flex-wrap items-center justify-end gap-1.5 max-w-2xl pointer-events-auto">
+            {['All', 'Rajasthan', 'Uttar Pradesh', 'Maharashtra', 'Karnataka', 'Tamil Nadu'].map(chip => (
               <button
                 key={chip}
                 onClick={() => filterMap(chip)}
