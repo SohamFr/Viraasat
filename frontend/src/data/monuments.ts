@@ -52,7 +52,7 @@ export const ALL_MONUMENTS: Monument[] = [
     built_century: '18th Century (1734)',
     lat: 26.9248,
     lng: 75.8246,
-    street_view_id: null,
+    street_view_id: '524874391837352',
     logistics: { opening_time: '09:00', closing_time: '16:30', closed_days: 'None', ticket_indian: 50, ticket_foreigner: 200, ticket_saarc: 50, camera_fee: 50, booking_url: 'https://bookrajasthanmonuments.in' },
   },
   {
@@ -63,7 +63,7 @@ export const ALL_MONUMENTS: Monument[] = [
     built_century: '17th Century (1632)',
     lat: 27.1751,
     lng: 78.0421,
-    street_view_id: null,
+    street_view_id: '944786032998308',
     logistics: { opening_time: '06:00', closing_time: '18:30', closed_days: 'Friday', ticket_indian: 250, ticket_foreigner: 1300, ticket_saarc: 740, camera_fee: 0, booking_url: 'https://asi.payumoney.com' },
   },
   {

@@ -58,33 +58,7 @@ const EPOCHS = [
 
 const ZOOM_THRESHOLD = 8;
 
-/** Create a monument pill marker element — NO CSS transitions on transform */
-function createMonumentEl(name: string): HTMLDivElement {
-  const wrapper = document.createElement('div');
-  // No transition on wrapper or any child — prevents marker drift
-  wrapper.style.cssText =
-    'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
-
-  const pill = document.createElement('div');
-  pill.style.cssText =
-    'padding:4px 10px;background:#141414;border:2px solid #D97706;border-radius:6px;' +
-    'box-shadow:2px 2px 0 #D97706;user-select:none;pointer-events:auto;';
-
-  const label = document.createElement('span');
-  label.style.cssText =
-    'font-size:11px;font-weight:700;color:#F5F5F4;text-transform:uppercase;' +
-    'letter-spacing:0.05em;font-family:system-ui,sans-serif;white-space:nowrap;';
-  label.textContent = name;
-  pill.appendChild(label);
-
-  const dot = document.createElement('div');
-  dot.style.cssText =
-    'width:5px;height:5px;background:#D97706;border-radius:50%;margin-top:3px;';
-
-  wrapper.appendChild(pill);
-  wrapper.appendChild(dot);
-  return wrapper;
-}
+// (Monument DOM marker code removed in favor of high-performance GeoJSON WebGL Layer)
 
 /** Create a city label marker element */
 function createCityEl(name: string): HTMLDivElement {
@@ -131,6 +105,7 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
   const [activeFilter, setActiveFilter] = useState('All');
   const [timelineEpoch, setTimelineEpoch] = useState<string>('All');
   const [monuments, setMonuments] = useState<Monument[]>([]);
+  const [markersLoaded, setMarkersLoaded] = useState(false);
 
   // Street view
   useEffect(() => {
@@ -178,32 +153,121 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
         const showMonuments = currentZoom >= ZOOM_THRESHOLD;
         let targetFound = false;
 
-        // --- Monument markers ---
-        data.forEach((monument) => {
-          if (!monument.lat || !monument.lng || !isFinite(monument.lat) || !isFinite(monument.lng)) return;
+        // --- Monument GeoJSON Layer ---
+        const geojsonData: GeoJSON.FeatureCollection = {
+          type: 'FeatureCollection',
+          features: data.filter(m => m.lat && m.lng && isFinite(m.lat) && isFinite(m.lng)).map(m => ({
+            type: 'Feature',
+            properties: {
+              id: m.id,
+              name: m.name,
+              built_century: m.built_century,
+              description: m.description,
+            },
+            geometry: { type: 'Point', coordinates: [m.lng, m.lat] }
+          }))
+        };
 
-          const el = createMonumentEl(monument.name);
-          el.style.display = showMonuments ? 'flex' : 'none';
-
-          el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            map.flyTo({ center: [monument.lng, monument.lat], zoom: 15, pitch: 45, bearing: 0, duration: 1800, essential: true });
-            setActiveMonument(monument);
+        if (map.getSource('monuments')) {
+          (map.getSource('monuments') as maplibregl.GeoJSONSource).setData(geojsonData);
+        } else {
+          map.addSource('monuments', {
+            type: 'geojson',
+            data: geojsonData,
+            cluster: true,
+            clusterMaxZoom: 13,
+            clusterRadius: 50
           });
 
-          const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
-            .setLngLat([monument.lng, monument.lat])
-            .addTo(map);
+          // Clusters
+          map.addLayer({
+            id: 'clusters',
+            type: 'circle',
+            source: 'monuments',
+            filter: ['has', 'point_count'],
+            minzoom: ZOOM_THRESHOLD,
+            paint: {
+              'circle-color': '#D97706',
+              'circle-radius': ['step', ['get', 'point_count'], 18, 100, 26, 750, 36],
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#141414'
+            }
+          });
 
-          markersRef.current.push({ isStateMarker: false, monument, marker, el });
+          map.addLayer({
+            id: 'cluster-count',
+            type: 'symbol',
+            source: 'monuments',
+            filter: ['has', 'point_count'],
+            minzoom: ZOOM_THRESHOLD,
+            layout: {
+              'text-field': '{point_count_abbreviated}',
+              'text-font': ['Metropolis Regular', 'sans-serif'], // MapTiler fallback fonts
+              'text-size': 12
+            },
+            paint: {
+              'text-color': '#141414'
+            }
+          });
 
-          if (targetMonumentName && monument.name.toLowerCase().includes(targetMonumentName.toLowerCase())) {
+          // Individual Monuments
+          map.addLayer({
+            id: 'unclustered-point',
+            type: 'circle',
+            source: 'monuments',
+            filter: ['!', ['has', 'point_count']],
+            minzoom: ZOOM_THRESHOLD,
+            paint: {
+              'circle-color': '#141414',
+              'circle-radius': 6,
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#D97706'
+            }
+          });
+
+          // Interactions
+          map.on('mouseenter', 'clusters', () => { map.getCanvas().style.cursor = 'pointer'; });
+          map.on('mouseleave', 'clusters', () => { map.getCanvas().style.cursor = ''; });
+          map.on('mouseenter', 'unclustered-point', () => { map.getCanvas().style.cursor = 'pointer'; });
+          map.on('mouseleave', 'unclustered-point', () => { map.getCanvas().style.cursor = ''; });
+
+          map.on('click', 'clusters', (e) => {
+            const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+            const clusterId = features[0].properties.cluster_id;
+            (map.getSource('monuments') as maplibregl.GeoJSONSource).getClusterExpansionZoom(
+              clusterId,
+              (err, zoom) => {
+                if (err) return;
+                map.easeTo({
+                  center: (features[0].geometry as GeoJSON.Point).coordinates as [number, number],
+                  zoom: zoom
+                });
+              }
+            );
+          });
+
+          map.on('click', 'unclustered-point', (e) => {
+            const feature = e.features?.[0];
+            if (feature) {
+              const monument = data.find(m => m.id === feature.properties.id);
+              if (monument) {
+                map.flyTo({ center: [monument.lng, monument.lat], zoom: 15, pitch: 45, bearing: 0, duration: 1800, essential: true });
+                setActiveMonument(monument);
+              }
+            }
+          });
+        }
+
+        if (targetMonumentName) {
+          const match = data.find(m => m.name.toLowerCase().includes(targetMonumentName.toLowerCase()));
+          if (match && match.lng && match.lat) {
             targetFound = true;
-            // Fly then open drawer
-            map.flyTo({ center: [monument.lng, monument.lat], zoom: 15, pitch: 45, bearing: 0, duration: 1800, essential: true });
-            setTimeout(() => setActiveMonument(monument), 1000);
+            map.flyTo({ center: [match.lng, match.lat], zoom: 15, pitch: 45, bearing: 0, duration: 1800, essential: true });
+            setTimeout(() => setActiveMonument(match), 1000);
           }
-        });
+        }
+        
+        setMarkersLoaded(true);
 
         // --- State markers ---
         Object.entries(STATE_PRESETS).forEach(([state, preset]) => {
@@ -298,6 +362,34 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
     tryFly();
   }, [targetMonumentName]);
 
+  // Reactively update GeoJSON source when filters or monuments change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.getSource('monuments') || monuments.length === 0) return;
+
+    const filtered = monuments.filter(m => {
+      const desc = m.description || '';
+      const name = m.name || '';
+      const cent = (m.built_century || '').toLowerCase();
+      
+      const matchFilter = activeFilter === 'All' || name.toLowerCase().includes(activeFilter.toLowerCase()) || desc.toLowerCase().includes(activeFilter.toLowerCase());
+      const matchTimeline = timelineEpoch === 'All' || timelineEpoch.split('|').some(q => cent.includes(q));
+      
+      return matchFilter && matchTimeline;
+    });
+
+    const geojsonData: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: filtered.filter(m => m.lat && m.lng && isFinite(m.lat) && isFinite(m.lng)).map(m => ({
+        type: 'Feature',
+        properties: { id: m.id, name: m.name, description: m.description, built_century: m.built_century },
+        geometry: { type: 'Point', coordinates: [m.lng, m.lat] }
+      }))
+    };
+
+    (map.getSource('monuments') as maplibregl.GeoJSONSource).setData(geojsonData);
+  }, [activeFilter, timelineEpoch, monuments, markersLoaded]);
+
   const filterMap = (filter: string) => {
     setActiveFilter(filter);
     const map = mapRef.current;
@@ -314,32 +406,10 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
         map.fitBounds(bounds, { padding: 80, maxZoom: 7, duration: 1200 });
       }
     }
-
-    // Highlight matching markers
-    markersRef.current.forEach(({ isStateMarker, monument, el }) => {
-      if (isStateMarker) return;
-      const desc = monument?.description || '';
-      const name = monument?.name || '';
-      const isMatch = filter === 'All' || name.toLowerCase().includes(filter.toLowerCase()) || desc.toLowerCase().includes(filter.toLowerCase());
-      el.style.opacity = isMatch ? '1' : '0.2';
-      el.style.pointerEvents = isMatch ? 'auto' : 'none';
-    });
   };
 
   const filterTimeline = (query: string) => {
     setTimelineEpoch(query);
-    markersRef.current.forEach(({ isStateMarker, monument, el }) => {
-      if (isStateMarker) return;
-      if (query === 'All') {
-        el.style.opacity = '1';
-        el.style.pointerEvents = 'auto';
-        return;
-      }
-      const cent = (monument?.built_century || '').toLowerCase();
-      const isMatch = query.split('|').some(q => cent.includes(q));
-      el.style.opacity = isMatch ? '1' : '0.2';
-      el.style.pointerEvents = isMatch ? 'auto' : 'none';
-    });
   };
 
   const handleShowRoute = async (endLat: number, endLng: number) => {
