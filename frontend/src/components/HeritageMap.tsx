@@ -170,9 +170,12 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
         });
 
         if (!targetFound && data.length > 0) {
-          const bounds = new maplibregl.LngLatBounds();
-          data.forEach(m => bounds.extend([m.lng, m.lat]));
-          map.fitBounds(bounds, { padding: 50, duration: 1000 });
+          const validMonuments = data.filter(m => m.lat && m.lng && isFinite(m.lat) && isFinite(m.lng));
+          if (validMonuments.length > 0) {
+            const bounds = new maplibregl.LngLatBounds();
+            validMonuments.forEach(m => bounds.extend([m.lng, m.lat]));
+            map.fitBounds(bounds, { padding: 50, duration: 1000 });
+          }
         }
 
         // Trigger initial zoom update
@@ -215,6 +218,30 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
       resizeObserver.disconnect();
       map.remove();
     };
+  }, []);
+
+  // Handle targetMonumentName changes without rebuilding the map
+  useEffect(() => {
+    if (!targetMonumentName) return;
+
+    const tryFly = (attempt = 0) => {
+      if (markersRef.current.length === 0) {
+        if (attempt < 20) setTimeout(() => tryFly(attempt + 1), 300);
+        return;
+      }
+      const match = markersRef.current.find(({ monument }) =>
+        !monument.id.toString().startsWith('CITY_') &&
+        monument.name.toLowerCase().includes(targetMonumentName.toLowerCase())
+      );
+      if (match) {
+        const map = mapRef.current;
+        if (map) {
+          map.flyTo({ center: [match.monument.lng, match.monument.lat], zoom: 15.5, pitch: 60, bearing: -15, duration: 2500, essential: true });
+          setTimeout(() => setActiveMonument(match.monument), 800);
+        }
+      }
+    };
+    tryFly();
   }, [targetMonumentName]);
 
   const filterMap = (filter: string) => {
@@ -234,7 +261,9 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
 
     // 2. Visually filter markers
     markersRef.current.forEach(({ monument, el }) => {
-      const isMatch = filter === 'All' || monument.name.toLowerCase().includes(filter.toLowerCase()) || monument.description.toLowerCase().includes(filter.toLowerCase());
+      if (monument.id.toString().startsWith('CITY_')) return; // skip city markers
+      const desc = monument.description || '';
+      const isMatch = filter === 'All' || monument.name.toLowerCase().includes(filter.toLowerCase()) || desc.toLowerCase().includes(filter.toLowerCase());
       el.style.opacity = isMatch ? '1' : '0.15';
       el.style.pointerEvents = isMatch ? 'auto' : 'none';
     });
@@ -249,7 +278,8 @@ export function HeritageMap({ onBack, targetMonumentName, viewMode = 'explore' }
         return;
       }
       
-      const cent = monument.built_century.toLowerCase();
+      if (monument.id.toString().startsWith('CITY_')) return; // skip city markers
+      const cent = (monument.built_century || '').toLowerCase();
       const queries = query.split('|');
       const isMatch = queries.some(q => cent.includes(q));
       
