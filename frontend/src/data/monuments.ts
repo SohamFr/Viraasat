@@ -125,9 +125,9 @@ export async function fetchMonuments(): Promise<Monument[]> {
       return monumentsData.map((m: any) => ({
         id: m.id,
         name: m.name,
-        description: m.description,
-        architectural_style: m.architectural_style,
-        built_century: m.built_century,
+        description: m.description || 'A historically significant monument protected by the Archaeological Survey of India.',
+        architectural_style: m.architectural_style || 'Heritage Architecture',
+        built_century: m.built_century || 'Historic',
         lat: m.lat,
         lng: m.lng,
         street_view_id: m.street_view_id,

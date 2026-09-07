@@ -28,9 +28,12 @@ export function MonumentsModal({ isOpen, onClose, onViewMap }: MonumentsModalPro
 
   const filteredMonuments = useMemo(() => {
     return monuments.filter(m => {
+      if (!m.name) return false;
+      const desc = m.description || '';
+      const style = m.architectural_style || '';
       const matchesSearch = m.name.toLowerCase().includes(search.toLowerCase()) || 
-                            m.description.toLowerCase().includes(search.toLowerCase());
-      const matchesStyle = activeStyle === 'All' || m.architectural_style.toLowerCase().includes(activeStyle.toLowerCase());
+                            desc.toLowerCase().includes(search.toLowerCase());
+      const matchesStyle = activeStyle === 'All' || style.toLowerCase().includes(activeStyle.toLowerCase());
       return matchesSearch && matchesStyle;
     });
   }, [monuments, search, activeStyle]);
@@ -103,22 +106,22 @@ export function MonumentsModal({ isOpen, onClose, onViewMap }: MonumentsModalPro
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="text-2xl text-white" style={{ fontFamily: "'Instrument Serif', serif" }}>{monument.name}</h3>
                     <span className="text-[10px] uppercase tracking-widest bg-white/10 px-2 py-1 rounded text-cyan-100 border border-white/10">
-                      {monument.built_century.split(' ')[0]}
+                      {(monument.built_century || 'Historic').split(' ')[0]}
                     </span>
                   </div>
                   
                   <p className="text-sm text-white/70 leading-relaxed mb-5 flex-1 line-clamp-3 font-sans">
-                    {monument.description}
+                    {monument.description || 'A historically significant monument protected by the Archaeological Survey of India.'}
                   </p>
                   
                   <div className="flex items-center justify-between text-xs text-white/50 mb-5 font-sans bg-black/20 p-3 rounded-xl border border-white/5">
                     <div className="flex items-center gap-1.5">
                       <Clock size={14} className="text-cyan-400" />
-                      <span>{monument.logistics ? `${monument.logistics.opening_time.substring(0,5)} - ${monument.logistics.closing_time.substring(0,5)}` : 'Timings varies'}</span>
+                      <span>{monument.logistics ? `${(monument.logistics.opening_time || '').substring(0,5)} – ${(monument.logistics.closing_time || '').substring(0,5)}` : 'Timings vary'}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <MapPin size={14} className="text-cyan-400" />
-                      <span className="truncate max-w-[120px]">{monument.architectural_style}</span>
+                      <span className="truncate max-w-[120px]">{monument.architectural_style || 'Heritage Site'}</span>
                     </div>
                   </div>
                   
